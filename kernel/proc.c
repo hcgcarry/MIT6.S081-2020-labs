@@ -146,6 +146,7 @@ found:
 static void
 freeproc(struct proc *p)
 {
+  // printf("freeproc %d",cpuid());
   if(p->trapframe)
     kfree((void*)p->trapframe);
   p->trapframe = 0;
@@ -205,6 +206,7 @@ proc_pagetable(struct proc *p)
 void
 proc_freepagetable(pagetable_t pagetable, uint64 sz)
 {
+  printf("proc_freepagetable cpu:%d ",cpuid());
   uvmunmap(pagetable, TRAMPOLINE, 1, 0);
   uvmunmap(pagetable, TRAPFRAME, 1, 0);
   uvmfree(pagetable, sz);
@@ -233,7 +235,7 @@ userinit(void)
   
   // allocate one user page and copy init's instructions
   // and data into it.
-  uvminit(p->pagetable, initcode, sizeof(initcode));
+  uvminit(p->pagetable,p->p_kernel_pagetable, initcode, sizeof(initcode));
   p->sz = PGSIZE;
 
   // prepare for the very first "return" from kernel to user.
@@ -261,8 +263,10 @@ growproc(int n)
     if((sz = uvmalloc(p->pagetable, sz, sz + n)) == 0) {
       return -1;
     }
+    copy_pagetable_mapping(p->pagetable,p->p_kernel_pagetable,sz-n,sz);
   } else if(n < 0){
     sz = uvmdealloc(p->pagetable, sz, sz + n);
+    sz = uvmdealloc(p->p_kernel_pagetable, sz, sz + n);
   }
   p->sz = sz;
   return 0;
@@ -282,12 +286,22 @@ fork(void)
     return -1;
   }
 
+  // 
+  if(p->sz >= PLIC){
+    panic("user space address greater than PLIC");
+  }
   // Copy user memory from parent to child.
   if(uvmcopy(p->pagetable, np->pagetable, p->sz) < 0){
     freeproc(np);
     release(&np->lock);
     return -1;
   }
+  if(copy_pagetable_mapping(np->pagetable, np->p_kernel_pagetable,0, np->sz) < 0){
+    freeproc(np);
+    release(&np->lock);
+    return -1;
+  }
+
   np->sz = p->sz;
 
   np->parent = p;

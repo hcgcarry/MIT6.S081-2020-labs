@@ -18,7 +18,7 @@ exec(char *path, char **argv)
   struct elfhdr elf;
   struct inode *ip;
   struct proghdr ph;
-  pagetable_t pagetable = 0, oldpagetable;
+  pagetable_t pagetable = 0, oldpagetable,p_kernel_pagetable = 0,old_p_kernel_pagetable;
   struct proc *p = myproc();
 
   begin_op();
@@ -36,6 +36,8 @@ exec(char *path, char **argv)
     goto bad;
 
   if((pagetable = proc_pagetable(p)) == 0)
+    goto bad;
+  if((p_kernel_pagetable = p_kvminit()) == 0)
     goto bad;
 
   // Load program into memory.
@@ -108,14 +110,21 @@ exec(char *path, char **argv)
       last = s+1;
   safestrcpy(p->name, last, sizeof(p->name));
     
+  copy_pagetable_mapping(pagetable,p_kernel_pagetable,0,sz);
   // Commit to the user image.
   oldpagetable = p->pagetable;
+  old_p_kernel_pagetable = p->p_kernel_pagetable;
   p->pagetable = pagetable;
+  p->p_kernel_pagetable = p_kernel_pagetable;
   p->sz = sz;
   p->trapframe->epc = elf.entry;  // initial program counter = main
   p->trapframe->sp = sp; // initial stack pointer
   proc_freepagetable(oldpagetable, oldsz);
+  printf("--- free old_p_kernel_pagetag",old_p_kernel_pagetable);
+  freewalk(old_p_kernel_pagetable);
+
   if(p->pid == 1) vmprint(p->pagetable);
+
 
   return argc; // this ends up in a0, the first argument to main(argc, argv)
 

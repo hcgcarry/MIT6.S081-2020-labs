@@ -112,11 +112,14 @@ kvminithart()
 pte_t *
 walk(pagetable_t pagetable, uint64 va, int alloc)
 {
+  // printf("-----walk pagetable %x, va %x,\n",pagetable,va);
   if(va >= MAXVA)
     panic("walk");
 
   for(int level = 2; level > 0; level--) {
     pte_t *pte = &pagetable[PX(level, va)];
+    // printf("-----level %d \n",level);
+
     if(*pte & PTE_V) {
       pagetable = (pagetable_t)PTE2PA(*pte);
     } else {
@@ -181,6 +184,23 @@ kvmpa(uint64 va)
   pa = PTE2PA(*pte);
   return pa+off;
 }
+
+uint64
+uvmpa(pagetable_t pagetable_t,uint64 va)
+{
+  uint64 off = va % PGSIZE;
+  pte_t *pte;
+  uint64 pa;
+  
+  pte = walk(pagetable_t, va, 0);
+  if(pte == 0)
+    panic("kvmpa");
+  if((*pte & PTE_V) == 0)
+    panic("kvmpa");
+  pa = PTE2PA(*pte);
+  return pa+off;
+}
+
 
 // Create PTEs for virtual addresses starting at va that refer to
 // physical addresses starting at pa. va and size might not
@@ -252,7 +272,7 @@ uvmcreate()
 // for the very first process.
 // sz must be less than a page.
 void
-uvminit(pagetable_t pagetable, uchar *src, uint sz)
+uvminit(pagetable_t pagetable,pagetable_t p_kernel_pagetable, uchar *src, uint sz)
 {
   char *mem;
 
@@ -261,7 +281,17 @@ uvminit(pagetable_t pagetable, uchar *src, uint sz)
   mem = kalloc();
   memset(mem, 0, PGSIZE);
   mappages(pagetable, 0, PGSIZE, (uint64)mem, PTE_W|PTE_R|PTE_X|PTE_U);
+  mappages(p_kernel_pagetable, 0, PGSIZE, (uint64)mem, PTE_W|PTE_R|PTE_X);
   memmove(mem, src, sz);
+}
+
+uint64
+kvmalloc(pagetable_t pagetable, uint64 oldsz, uint64 newsz)
+{
+  if(newsz >= PLIC){
+    panic(" kvmalloc newsz greater than PLIC address");
+  }
+  return uvmalloc(pagetable,oldsz,newsz);
 }
 
 // Allocate PTEs and physical memory to grow process from oldsz to
@@ -315,6 +345,7 @@ uvmdealloc(pagetable_t pagetable, uint64 oldsz, uint64 newsz)
 void
 freewalk(pagetable_t pagetable)
 {
+  printf("freewalk %x\n",pagetable);
   // there are 2^9 = 512 PTEs in a page table.
   for(int i = 0; i < 512; i++){
     pte_t pte = pagetable[i];
@@ -335,6 +366,7 @@ freewalk(pagetable_t pagetable)
 void
 uvmfree(pagetable_t pagetable, uint64 sz)
 {
+  printf("uvmfree %d starting\n", cpuid());
   if(sz > 0)
     uvmunmap(pagetable, 0, PGROUNDUP(sz)/PGSIZE, 1);
   freewalk(pagetable);
@@ -512,4 +544,33 @@ void vmprint(pagetable_t pagetable)
 {
   printf("page table %p\n", pagetable);
   _helper_vmprint(pagetable, 0);
+}
+
+
+int
+copy_pagetable_mapping(pagetable_t old, pagetable_t new, uint64 start_va,uint64 end_va)
+{
+  pte_t *pte;
+  uint64 pa, i;
+  uint flags;
+  if(end_va >= PLIC){
+    panic("copy_pagetable_mapping size greater than PLIC");
+  }
+
+  for(i = start_va; i < end_va; i += PGSIZE){
+    if((pte = walk(old, i, 0)) == 0)
+      panic("uvmcopy: pte should exist");
+    if((*pte & PTE_V) == 0)
+      panic("uvmcopy: page not present");
+    pa = PTE2PA(*pte);
+    flags = PTE_FLAGS(*pte)  & ~(PTE_U);
+    if(mappages(new, i, PGSIZE, (uint64)pa, flags) != 0){
+      goto err;
+    }
+  }
+  return 0;
+
+ err:
+  uvmunmap(new, 0, i / PGSIZE, 0);
+  return -1;
 }
