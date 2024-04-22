@@ -217,8 +217,10 @@ mappages(pagetable_t pagetable, uint64 va, uint64 size, uint64 pa, int perm)
   for(;;){
     if((pte = walk(pagetable, a, 1)) == 0)
       return -1;
-    if(*pte & PTE_V)
-      panic("remap");
+    if(*pte & PTE_V){
+      printf("remap: va %p\n",a);
+      panic("remap ");
+    }
     *pte = PA2PTE(pa) | perm | PTE_V;
     if(a == last)
       break;
@@ -241,8 +243,10 @@ uvmunmap(pagetable_t pagetable, uint64 va, uint64 npages, int do_free)
     panic("uvmunmap: not aligned");
 
   for(a = va; a < va + npages*PGSIZE; a += PGSIZE){
-    if((pte = walk(pagetable, a, 0)) == 0)
+    if((pte = walk(pagetable, a, 0)) == 0){
+      printf("uvmunmap va %p\n",a);
       panic("uvmunmap: walk");
+    }
     if((*pte & PTE_V) == 0)
       panic("uvmunmap: not mapped");
     if(PTE_FLAGS(*pte) == PTE_V)
@@ -345,7 +349,7 @@ uvmdealloc(pagetable_t pagetable, uint64 oldsz, uint64 newsz)
 void
 freewalk(pagetable_t pagetable)
 {
-  printf("freewalk %x\n",pagetable);
+  printf("freewalk %p\n",pagetable);
   // there are 2^9 = 512 PTEs in a page table.
   for(int i = 0; i < 512; i++){
     pte_t pte = pagetable[i];
@@ -515,7 +519,7 @@ copyinstr(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max)
 }
 
 void
-_helper_vmprint(pagetable_t pagetable, int level)
+_helper_vmprint(pagetable_t pagetable, int level,int va)
 {
   for(int i = 0; i < 512; i++){
     pte_t pte = pagetable[i];
@@ -528,22 +532,23 @@ _helper_vmprint(pagetable_t pagetable, int level)
           printf(" ");
         }
       }
-      printf("%d: pte %p pa %p\n", i, pte, child);
-      _helper_vmprint((pagetable_t)child, level+1);
+      va |=  PAGEINDEX_2_VA(level,i);
+      printf("%d: pte %p ,va %p ,pa %p\n", i, pte, va,child);
+      _helper_vmprint((pagetable_t)child, level+1,va);
     }
-    else if (pte & PTE_V) {
-      uint64 child = PTE2PA(pte);
-      // the lowest valid page table
-      printf(".. .. ..%d: pte %p pa %p\n", i, pte, child);
-    }
+    // else if (pte & PTE_V) {
+    //   uint64 child = PTE2PA(pte);
+    //   // the lowest valid page table
+    //   printf(".. .. ..%d: pte %p pa %p\n", i, pte, child);
+    // }
   }
 }
 
 // print the page table
 void vmprint(pagetable_t pagetable)
 {
-  printf("page table %p\n", pagetable);
-  _helper_vmprint(pagetable, 0);
+  printf("---- vmprint page table %p\n", pagetable);
+  _helper_vmprint(pagetable, 0,0);
 }
 
 

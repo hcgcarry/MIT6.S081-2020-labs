@@ -344,6 +344,8 @@ sfence_vma()
 #define PXSHIFT(level)  (PGSHIFT+(9*(level)))
 #define PX(level, va) ((((uint64) (va)) >> PXSHIFT(level)) & PXMASK)
 
+#define PAGEINDEX_2_VA(level, index) ((((uint64) (index)) << PXSHIFT((uint64)2-level)) )
+
 // one beyond the highest possible virtual address.
 // MAXVA is actually one bit less than the max allowed by
 // Sv39, to avoid having to sign-extend virtual addresses

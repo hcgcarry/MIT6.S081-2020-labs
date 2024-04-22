@@ -296,7 +296,7 @@ fork(void)
     release(&np->lock);
     return -1;
   }
-  if(copy_pagetable_mapping(np->pagetable, np->p_kernel_pagetable,0, np->sz) < 0){
+  if(copy_pagetable_mapping(np->pagetable, np->p_kernel_pagetable,0, p->sz) < 0){
     freeproc(np);
     release(&np->lock);
     return -1;
@@ -485,6 +485,8 @@ wait(uint64 addr)
 void
 scheduler(void)
 {
+  printf("---- start scheduler");
+
   struct proc *p;
   struct cpu *c = mycpu();
   
