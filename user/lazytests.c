@@ -63,7 +63,7 @@ sparse_memory_unmap(char *s)
     } else {
       int status;
       wait(&status);
-      if (status == 0) {
+      if (status == 0){
         printf("memory not unmapped\n");
         exit(1);
       }

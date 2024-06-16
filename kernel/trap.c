@@ -52,6 +52,10 @@ usertrap(void)
   
   if(r_scause() == 13 || r_scause() == 15){
     uint64 page_fault_address  = r_stval();
+    if(page_fault_address >= p->sz){
+      p->killed = 1;
+      exit(-1);
+    }
     page_fault_address = PGROUNDDOWN(page_fault_address);
     char* mem;
     mem = kalloc();
