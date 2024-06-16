@@ -50,7 +50,15 @@ usertrap(void)
   // save user program counter.
   p->trapframe->epc = r_sepc();
   
-  if(r_scause() == 8){
+  if(r_scause() == 13 || r_scause() == 15){
+    uint64 page_fault_address  = r_stval();
+    page_fault_address = PGROUNDDOWN(page_fault_address);
+    char* mem;
+    mem = kalloc();
+    memset(mem, 0, PGSIZE);
+    mappages(p->pagetable, page_fault_address, PGSIZE, (uint64)mem, PTE_W|PTE_X|PTE_R|PTE_U);
+  }
+  else if(r_scause() == 8){
     // system call
 
     if(p->killed)
